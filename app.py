@@ -1,9 +1,11 @@
 import discord
+import youtube_dl
 from discord.ext import commands
 import functions as fn
 from voiceTime import voiceTime
 from data.data import token
 from connection import mysqlExecute
+from logger import log
 
 client = commands.Bot(command_prefix='?')
 client.remove_command('help')
@@ -18,6 +20,28 @@ async def on_ready():
         mysqlExecute("CREATE TABLE IF NOT EXISTS server_err LIKE users")
         mysqlExecute("CREATE TABLE IF NOT EXISTS logs_{} (id INT PRIMARY KEY AUTO_INCREMENT, log TEXT)".format(server.id))
         mysqlExecute("CREATE TABLE IF NOT EXISTS logs_{} (id INT PRIMARY KEY AUTO_INCREMENT, log TEXT)".format("err"))
+
+
+@client.event
+async def on_voice_state_update(before, after):
+    await voiceTime(before, after, client)
+
+
+@client.event
+async def on_server_join(server):
+    log("Joined to new server: {}".format(server.name))
+    mysqlExecute("CREATE TABLE IF NOT EXISTS server_{} LIKE users".format(server.id))
+    mysqlExecute("CREATE TABLE IF NOT EXISTS logs_{} (id INT PRIMARY KEY AUTO_INCREMENT, log TEXT)".format(server.id))
+
+
+@client.event
+async def on_server_remove(server):
+    log("Removed from server: {}".format(server.name))
+    mysqlExecute("DROP TABLE logs_{}".format(server.id))
+    mysqlExecute("DROP TABLE server_{}".format(server.id))
+
+
+#Bazowe komendy
 
 
 @client.command(pass_context=True)
@@ -70,9 +94,109 @@ async def clear(ctx, amount = 50):
         await client.say("{} You have no permission!".format(author))
 
 
-@client.event
-async def on_voice_state_update(before, after):
-    await voiceTime(before, after, client)
+#Komendy związane z czatem głosowym
+
+
+players = {}
+queues = {}
+
+
+def checkQueue(id):
+    if queues[id] is not []:
+        player = queues[id].pop(0)
+        players[id] = player
+        player.start()
+
+
+@client.command(pass_context=True)
+async def join(ctx):
+    channel = ctx.message.author.voice.voice_channel
+    if channel is None:
+        await client.say("{} You must join to any channel first".format(ctx.message.author.mention))
+    else:
+        await client.join_voice_channel(channel)
+
+
+@client.command(pass_context=True)
+async def leave(ctx):
+    server = ctx.message.server
+    voiceClient = client.voice_client_in(server)
+    await voiceClient.disconnect()
+
+
+#KOMENDA PLAY
+
+
+@client.command(pass_context=True)
+async def play(ctx, url=None):
+    mention = ctx.message.author.mention
+    if url is None:
+        await client.say("{} Please use ?play <url>".format(mention))
+        return
+    server = ctx.message.server
+
+    try:
+        if server.id in players:
+            newVoiceClient = client.voice_client_in(server)
+            newPlayer = await newVoiceClient.create_ytdl_player(url, after=lambda: checkQueue(server.id))
+
+            if server.id in queues:
+                queues[server.id].append(newPlayer)
+            else:
+                queues[server.id] = [newPlayer]
+            await client.say('{} Video queued'.format(mention))
+            return
+        voiceClient = client.voice_client_in(server)
+        if voiceClient is None:
+            channel = ctx.message.author.voice.voice_channel
+            if channel is None:
+                await client.say("{} You must join to any channel first".format(mention))
+                return
+            else:
+                await client.join_voice_channel(channel)
+                voiceClient = client.voice_client_in(server)
+
+        player = await voiceClient.create_ytdl_player(url, after=lambda: checkQueue(server.id))
+        players[server.id] = player
+        player.start()
+
+    except youtube_dl.utils.DownloadError as err:
+        msg = "{} Error: '{}' is not a valid URL".format(mention, url)
+        await client.send_message(ctx.message.channel, msg)
+
+
+@client.command(pass_context=True)
+async def pause(ctx):
+    id = ctx.message.server.id
+    try: players[id].pause()
+    except Exception: return
+
+
+@client.command(pass_context=True)
+async def stop(ctx):
+    server = ctx.message.server
+    try:
+        players[server.id].stop()
+        voiceClient = client.voice_client_in(server)
+        await voiceClient.disconnect()
+    except Exception:
+        return
+
+
+@client.command(pass_context=True)
+async def skip(ctx):
+    server = ctx.message.server
+    try:
+        players[server.id].stop()
+        client.say("Video skipped")
+    except Exception: return
+
+
+@client.command(pass_context=True)
+async def resume(ctx):
+    id = ctx.message.server.id
+    try: players[id].resume()
+    except Exception: return
 
 
 client.run(token)
