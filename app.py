@@ -106,6 +106,8 @@ def checkQueue(id):
         player = queues[id].pop(0)
         players[id] = player
         player.start()
+    else:
+        players.pop(id)
 
 
 @client.command(pass_context=True)
@@ -158,8 +160,8 @@ async def play(ctx, url=None):
             return
 
         player = await voiceClient.create_ytdl_player(url, after=lambda: checkQueue(server.id))
-        players[server.id] = player
         player.start()
+        players[server.id] = player
 
     except youtube_dl.utils.DownloadError as err:
         msg = "{} Error: '{}' is not a valid URL".format(mention, url)
@@ -168,8 +170,10 @@ async def play(ctx, url=None):
 
 @client.command(pass_context=True)
 async def pause(ctx):
-    id = ctx.message.server.id
-    try: players[id].pause()
+    server = ctx.message.server
+    try:
+        players[server.id].pause()
+        await client.say("Player paused, type ?resume to play")
     except Exception: return
 
 
@@ -188,10 +192,11 @@ async def stop(ctx):
 @client.command(pass_context=True)
 async def skip(ctx):
     server = ctx.message.server
-    try:
+    if server.id in players:
         players[server.id].stop()
-        client.say("Video skipped")
-    except Exception: return
+        players.pop(server.id)
+    await client.say("Video skipped")
+    await client.delete_message(ctx.message)
 
 
 @client.command(pass_context=True)
@@ -199,6 +204,5 @@ async def resume(ctx):
     id = ctx.message.server.id
     try: players[id].resume()
     except Exception: return
-
 
 client.run(token)
