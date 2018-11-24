@@ -136,6 +136,16 @@ async def play(ctx, url=None):
     server = ctx.message.server
 
     try:
+        voiceClient = client.voice_client_in(server)
+        if voiceClient is None:
+            channel = ctx.message.author.voice.voice_channel
+            if channel is None:
+                await client.say("{} You must join to any channel first".format(mention))
+                return
+            else:
+                await client.join_voice_channel(channel)
+                voiceClient = client.voice_client_in(server)
+
         if server.id in players:
             newVoiceClient = client.voice_client_in(server)
             newPlayer = await newVoiceClient.create_ytdl_player(url, after=lambda: checkQueue(server.id))
@@ -146,15 +156,6 @@ async def play(ctx, url=None):
                 queues[server.id] = [newPlayer]
             await client.say('{} Video queued'.format(mention))
             return
-        voiceClient = client.voice_client_in(server)
-        if voiceClient is None:
-            channel = ctx.message.author.voice.voice_channel
-            if channel is None:
-                await client.say("{} You must join to any channel first".format(mention))
-                return
-            else:
-                await client.join_voice_channel(channel)
-                voiceClient = client.voice_client_in(server)
 
         player = await voiceClient.create_ytdl_player(url, after=lambda: checkQueue(server.id))
         players[server.id] = player
@@ -175,12 +176,13 @@ async def pause(ctx):
 @client.command(pass_context=True)
 async def stop(ctx):
     server = ctx.message.server
-    try:
+    if server.id in queues:
+        queues.pop(server.id)
+    if server.id in players:
         players[server.id].stop()
-        voiceClient = client.voice_client_in(server)
-        await voiceClient.disconnect()
-    except Exception:
-        return
+        players.pop(server.id)
+    voiceClient = client.voice_client_in(server)
+    await voiceClient.disconnect()
 
 
 @client.command(pass_context=True)
