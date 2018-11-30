@@ -3,23 +3,38 @@ from data.data import datab
 
 con = object
 
-try:
-    mydb = mysql.connector.connect(
-        host=datab['host'],
-        user=datab['user'],
-        passwd=datab['password'],
-        database=datab['database']
-    )
-    con = mydb.cursor()
-except Exception as err:
-    print(err)
-
 
 def mysqlQuery(query):
-    con.execute(query)
-    return con.fetchall()
+    try:
+        mydb = mysql.connector.connect(
+            host=datab['host'],
+            user=datab['user'],
+            passwd=datab['password'],
+            database=datab['database']
+        )
+        con = mydb.cursor()
+        con.execute(query)
+        res = con.fetchall()
+        con.close()
+        return res
+    except Exception as err:
+        print(err)
+        return
 
 
 def mysqlExecute(query):
-    con.execute(query)
-    mydb.commit()
+    try:
+        mydb = mysql.connector.connect(
+            host=datab['host'],
+            user=datab['user'],
+            passwd=datab['password'],
+            database=datab['database']
+        )
+        con = mydb.cursor()
+        con.execute(query)
+        mydb.commit()
+        con.close()
+        return
+    except Exception as err:
+        print(err)
+        return

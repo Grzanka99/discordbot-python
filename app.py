@@ -122,6 +122,11 @@ async def join(ctx):
 @client.command(pass_context=True)
 async def leave(ctx):
     server = ctx.message.server
+    if server.id in queues:
+        queues.pop(server.id)
+    if server.id in players:
+        players[server.id].stop()
+        players.pop(server.id)
     voiceClient = client.voice_client_in(server)
     await voiceClient.disconnect()
 

@@ -3,7 +3,7 @@ from math import floor
 
 
 def getCommands():
-    res = mysqlQuery("SELECT * FROM commands")
+    res = mysqlQuery("SELECT * FROM commands ORDER BY cmd_name")
     return res
 
 
